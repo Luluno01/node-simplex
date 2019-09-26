@@ -1,0 +1,25 @@
+{
+  "name": "simplex",
+  "version": "1.0.0",
+  "description": "Linear program simplex method solver",
+  "main": "build/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc"
+  },
+  "keywords": [
+    "simplex"
+  ],
+  "author": "Untitled",
+  "license": "ISC",
+  "dependencies": {
+    "algebra.js": "^0.2.6",
+    "mathjs": "^6.2.1"
+  },
+  "devDependencies": {
+    "@types/algebra.js": "^0.2.1",
+    "@types/mathjs": "^6.0.2",
+    "@types/node": "^12.7.5",
+    "typescript": "^3.6.3"
+  }
+}
