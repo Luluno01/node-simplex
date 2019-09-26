@@ -73,7 +73,11 @@ export class LinearProgram implements PlainLinearProgram {
    */
   basics: Set<string> = new Set
 
-  helper: string
+  /**
+   * Name of helper variable if the parent dictionary is infeasible (thus this
+   * is a helper LP/dictionary)
+   */
+  helper?: string
 
   /**
    * 
@@ -105,8 +109,16 @@ export class LinearProgram implements PlainLinearProgram {
     }
   }
 
-  static create() {
-
+  /**
+   * Create a `LinearProgram` from strings
+   * @param lp Linear program in standard form (string)
+   */
+  static fromString({ variables, objective, constraints }: { variables: number, objective: string, constraints: string[] }) {
+    return new LinearProgram({
+      variables,
+      objective: <Expression>algebra.parse(objective),
+      constraints: constraints.map(s => <Equation>algebra.parse(s))
+    })
   }
 
   /**
@@ -195,6 +207,10 @@ export class LinearProgram implements PlainLinearProgram {
     else return Result.OPTIMAL  // Coefficients of all variables are non-positive
   }
 
+  /**
+   * Get current (basic) solution
+   * Caller must ensure the dictionary is feasible
+   */
   getCurrentSolution() {
     const constants = this.objective.constants
     return (constants.length && constants[0].valueOf()) || 0
@@ -291,7 +307,7 @@ export class LinearProgram implements PlainLinearProgram {
     yield *this.solve()
   }
 
-  *infeasibleHelper(): Generator<[ LinearProgram, Result ], void> {
+  private *infeasibleHelper(): Generator<[ LinearProgram, Result ], void> {
     const lp = new LinearProgram(this)
     const helper = 'helperVariable'
     const helperVar = <Expression>algebra.parse(helper)
