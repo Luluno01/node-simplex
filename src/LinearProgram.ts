@@ -24,10 +24,14 @@ export interface PlainLinearProgram {
 }
 
 export enum Result {
-  OPTIMIZABLE,
-  OPTIMAL,
-  UNBOUNDED,
-  INFEASIBLE
+  OPTIMIZABLE = 'optimizable',
+  OPTIMAL = 'optimal',
+  UNBOUNDED = 'unbounded',
+  INFEASIBLE = 'infeasible',
+  HELP_NEEDED = 'helper-needed',
+  HELPER_CREATED = 'helper-created',
+  HELPER_FEASIBLE = 'helper-feasible',
+  ORIGIN_FEASIBLE = 'origin-feasible'
 }
 
 function coeffOf(terms: typeof Expression.prototype.terms, variableName: string) {
@@ -87,6 +91,8 @@ export class LinearProgram implements PlainLinearProgram {
    * Names of basic variables
    */
   basics: Set<string> = new Set
+
+  helper: string
 
   /**
    * 
@@ -179,7 +185,6 @@ export class LinearProgram implements PlainLinearProgram {
       if(coeffOf(objective.terms, nonBasicVariableName) > 0) {
         // Optimizable
         let minIncrementBound: IncrementBound
-        let constraintIndex = 0
         for(const constraint of constraints) {
           const coeff = coeffOf(constraint.rhs.terms, nonBasicVariableName)
           if(coeff < 0) {
@@ -200,7 +205,6 @@ export class LinearProgram implements PlainLinearProgram {
               }
             }
           }
-          constraintIndex++
         }
         if(minIncrementBound) incrementBounds.push(minIncrementBound)
         else return Result.UNBOUNDED
@@ -210,6 +214,11 @@ export class LinearProgram implements PlainLinearProgram {
     else return Result.OPTIMAL  // Coefficients of all variables are non-positive
   }
 
+  getCurrentSolution() {
+    const constants = this.objective.constants
+    return (constants.length && constants[0].valueOf()) || 0
+  }
+
   /**
    * Get the dual LP
    */
@@ -217,19 +226,32 @@ export class LinearProgram implements PlainLinearProgram {
     throw new Error('Not implemented')
   }
 
-  private enterAndLeave(nonBasicVariableName: string, basicVariableName: string) {
+  private doPivot(nonBasicVariableName: string, constraint: Equation) {
+    const basicVariableName = constraint.lhs.terms[0].variables[0].variable
+    const newConstraint = new Equation(new Expression(nonBasicVariableName), <Expression><unknown>constraint.solveFor(nonBasicVariableName))
+    this.constraints = this.constraints.map(cons => {
+      if(cons == constraint) {
+        return newConstraint
+      } else {
+        const varMap: { [name: string]: Expression } = {}
+        varMap[nonBasicVariableName] = newConstraint.rhs
+        return new Equation(cons.lhs, cons.rhs.eval(varMap))
+      }
+    })
     const { nonBasics, basics } = this
     nonBasics.delete(nonBasicVariableName)
     nonBasics.add(basicVariableName)
     basics.delete(basicVariableName)
     basics.add(nonBasicVariableName)
+    const varMap: { [name: string]: Expression } = {}
+    varMap[nonBasicVariableName] = newConstraint.rhs
+    this.objective = this.objective.eval(varMap, true)
   }
 
   /**
    * Do next pivot
    */
-  next() {
-    const notImplemented = new Error('Not implemented')
+  private next() {
     if(this.isUnbounded()) return Result.UNBOUNDED  // No need to be feasible if unbounded
     if(this.isFeasible()) {
       const res = this.pickEnter()
@@ -240,25 +262,77 @@ export class LinearProgram implements PlainLinearProgram {
       }
       const [ variableName, constraint ] = res[0]  // TODO: implement some picking strategy
       // `variableName` enters, lhs of constraint leaves
-      const newConstraint = new Equation(new Expression(variableName), <Expression><unknown>constraint.solveFor(variableName))
-      this.constraints.forEach((cons, constraintIndex) => {
-        if(cons == constraint) {
-          this.constraints[constraintIndex] = newConstraint
-        } else {
-          const varMap: { [name: string]: Expression } = {}
-          varMap[variableName] = newConstraint.rhs
-          this.constraints[constraintIndex] = new Equation(cons.lhs, cons.rhs.eval(varMap))
-        }
-      })
-      this.enterAndLeave(variableName, constraint.lhs.terms[0].variables[0].variable)
-      const varMap: { [name: string]: Expression } = {}
-      varMap[variableName] = newConstraint.rhs
-      this.objective = this.objective.eval(varMap, true)
+      this.doPivot(variableName, constraint)
       assert(this.isFeasible())
       if(this.isOptimal()) return Result.OPTIMAL
       if(this.isUnbounded()) return Result.UNBOUNDED
       return Result.OPTIMIZABLE
-    } else throw notImplemented
+    } else {
+      // The dictionary is not feasible
+      return Result.HELP_NEEDED
+    }
+  }
+
+  *solve(): Generator<[ LinearProgram, Result ], void> {
+    let result = this.next()
+    while(result == Result.OPTIMIZABLE) {
+      yield [ this, result ]
+      result = this.next()
+    }
+    yield [ this, result ]
+    if(result != Result.HELP_NEEDED) return
+    const gen = this.infeasibleHelper()
+    let helperGenRes = gen.next()
+    let helperLP: LinearProgram
+    let helperResult: Result
+    while(!helperGenRes.done) {
+      const [ lp, res ] = <[ LinearProgram, Result ]>helperGenRes.value
+      helperLP = lp
+      helperResult = res
+      yield <[ LinearProgram, Result ]>helperGenRes.value
+      helperGenRes = gen.next()
+    }
+    assert(helperResult == Result.OPTIMAL, `Helper LP should not end up with result ${helperResult}`)
+    if(helperLP.getCurrentSolution() != 0) {
+      yield [ this, Result.INFEASIBLE ]
+      return
+    }
+    // We actually found a feasible solution
+    const varMap: { [name: string]: Expression } = {}
+    varMap[helperLP.helper] = new Expression(0)
+    this.constraints = helperLP.constraints.map(({ lhs, rhs }) => new Equation(lhs, rhs.eval(varMap)))
+    delete varMap[helperLP.helper]
+    for(const { lhs, rhs } of this.constraints) {
+      varMap[lhs.terms[0].variables[0].variable] = rhs
+    }
+    this.objective = this.objective.eval(varMap)
+    yield [ this, Result.ORIGIN_FEASIBLE ]
+    yield *this.solve()
+  }
+
+  *infeasibleHelper(): Generator<[ LinearProgram, Result ], void> {
+    const lp = new LinearProgram(this)
+    const helper = 'helperVariable'
+    const helperVar = <Expression>algebra.parse(helper)
+    lp.helper = helper
+    lp.variables++
+    lp.objective = <Expression>algebra.parse(`- ${helper}`)
+    let constraintForNextPivot: Equation
+    let minConst: number = +Infinity
+    lp.constraints = lp.constraints.map(constraint => {
+      const constant = (constraint.rhs.constants.length && constraint.rhs.constants[0].valueOf()) || 0
+      if(constant < minConst) {
+        minConst = constant
+        constraintForNextPivot = constraint = new Equation(constraint.lhs, constraint.rhs.add(helperVar))
+        return constraint
+      }
+      return new Equation(constraint.lhs, constraint.rhs.add(helperVar))
+    })
+    yield [ lp, Result.HELPER_CREATED ]
+    lp.doPivot(helper, constraintForNextPivot)
+    // At this point we should have a feasible dictionary
+    yield [ lp, Result.HELPER_FEASIBLE ]
+    yield *lp.solve()
   }
 
   toString() {
