@@ -44,26 +44,7 @@ function coeffOf(terms: typeof Expression.prototype.terms, variableName: string)
 /**
  * Human-readable representation of linear program
  * 
- * Usage example:
- * 
- * ```
- * const lp = new LinearProgram({
- *   variables: 2,
- *   objective: algebra.parse('2 * x1 + 3 * x2'),
- *   constraints: [
- *     new algebra.Equation(algebra.parse('w1'), algebra.parse('6 - x1 - x2')),
- *     new algebra.Equation(algebra.parse('w2'), algebra.parse('10 - 2 * x1 - x2')),
- *     new algebra.Equation(algebra.parse('w3'), algebra.parse('4 + x1 - x2'))
- *   ]
- * })
- * 
- * console.log(lp.toString())
- * console.log(lp.next())
- * console.log(lp.toString())
- * console.log(lp.next())
- * console.log(lp.toString())
- * console.log(lp.next())
- * ```
+ * See `src/examples` for usage examples
  */
 export class LinearProgram implements PlainLinearProgram {
   /**
