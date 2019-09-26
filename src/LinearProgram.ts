@@ -1,7 +1,13 @@
 import * as assert from 'assert'
 import * as algebra from 'algebra.js'
-import { Expression, Equation } from 'algebra.js'
+import { Expression, Equation, Fraction } from 'algebra.js'
+import { EventEmitter } from 'events'
+import * as strategies from './strategies'
 
+
+function getConstant(constants: Fraction[]) {
+  return (constants.length && constants[0].valueOf()) || 0
+}
 
 export interface PlainLinearProgram {
   /**
@@ -46,7 +52,7 @@ function coeffOf(terms: typeof Expression.prototype.terms, variableName: string)
  * 
  * See `src/examples` for usage examples
  */
-export class LinearProgram implements PlainLinearProgram {
+export class LinearProgram extends EventEmitter implements PlainLinearProgram {
   /**
    * The number of variables (standard)
    */
@@ -72,6 +78,10 @@ export class LinearProgram implements PlainLinearProgram {
    * Names of basic variables
    */
   basics: Set<string> = new Set
+  /**
+   * Picking strategy
+   */
+  strategy?: strategies.Strategy = new strategies.CyclingAvoidance(this)
 
   /**
    * Name of helper variable if the parent dictionary is infeasible (thus this
@@ -87,6 +97,7 @@ export class LinearProgram implements PlainLinearProgram {
    * @param deepCopy Deep copy the input `lp` (defaults to `true`)
    */
   constructor({ variables, objective, constraints }: PlainLinearProgram, deepCopy: boolean = true) {
+    super()
     this.variables = variables
     assert(variables > 0, `Invalid number of variables: ${variables}`)
     for(const { variables: [ { variable } ] } of objective.terms) {
@@ -185,7 +196,7 @@ export class LinearProgram implements PlainLinearProgram {
               minIncrementBound = [
                 nonBasicVariableName,
                 constraint,
-                constraint.rhs.constants[0].valueOf() / (-coeff)
+                getConstant(constraint.rhs.constants) / (-coeff)
               ]
             } else {
               const bound = constraint.rhs.constants[0].valueOf() / (-coeff)
@@ -193,7 +204,7 @@ export class LinearProgram implements PlainLinearProgram {
                 minIncrementBound = [
                   nonBasicVariableName,
                   constraint,
-                  constraint.rhs.constants[0].valueOf() / (-coeff)
+                  getConstant(constraint.rhs.constants) / (-coeff)
                 ]
               }
             }
@@ -212,8 +223,7 @@ export class LinearProgram implements PlainLinearProgram {
    * Caller must ensure the dictionary is feasible
    */
   getCurrentSolution() {
-    const constants = this.objective.constants
-    return (constants.length && constants[0].valueOf()) || 0
+    return getConstant(this.objective.constants)
   }
 
   /**
@@ -253,29 +263,46 @@ export class LinearProgram implements PlainLinearProgram {
     if(this.isFeasible()) {
       const res = this.pickEnter()
       switch(res) {
-        case Result.OPTIMAL: return Result.OPTIMAL
+        case Result.OPTIMAL: {
+          this.emit(Result.OPTIMAL)
+          return Result.OPTIMAL
+        }
         case Result.UNBOUNDED: throw new Error('Unbounded dictionary detected, but the dictionary is detected as bounded previously')
         default:
       }
-      const [ variableName, constraint ] = res[0]  // TODO: implement some picking strategy
+      if(!this.strategy) this.strategy = new strategies.CyclingAvoidance(this)
+      const [ variableName, constraint ] = this.strategy.pick(res)
       // `variableName` enters, lhs of constraint leaves
       this.doPivot(variableName, constraint)
       assert(this.isFeasible())
-      if(this.isOptimal()) return Result.OPTIMAL
-      if(this.isUnbounded()) return Result.UNBOUNDED
+      if(this.isOptimal()) {
+        this.emit(Result.OPTIMAL)
+        return Result.OPTIMAL
+      }
+      if(this.isUnbounded()) {
+        this.emit(Result.UNBOUNDED)
+        return Result.UNBOUNDED
+      }
+      this.emit(Result.OPTIMIZABLE)
       return Result.OPTIMIZABLE
     } else {
       // The dictionary is not feasible
+      this.emit(Result.HELP_NEEDED)
       return Result.HELP_NEEDED
     }
   }
 
+  /**
+   * Solve the LP step by step
+   */
   *solve(): Generator<[ LinearProgram, Result ], void> {
     let result = this.next()
     while(result == Result.OPTIMIZABLE) {
+      this.emit(result)
       yield [ this, result ]
       result = this.next()
     }
+    this.emit(result)
     yield [ this, result ]
     if(result != Result.HELP_NEEDED) return
     const gen = this.infeasibleHelper()
@@ -286,11 +313,13 @@ export class LinearProgram implements PlainLinearProgram {
       const [ lp, res ] = <[ LinearProgram, Result ]>helperGenRes.value
       helperLP = lp
       helperResult = res
+      this.emit(res)
       yield <[ LinearProgram, Result ]>helperGenRes.value
       helperGenRes = gen.next()
     }
     assert(helperResult == Result.OPTIMAL, `Helper LP should not end up with result ${helperResult}`)
     if(helperLP.getCurrentSolution() != 0) {
+      this.emit(Result.INFEASIBLE)
       yield [ this, Result.INFEASIBLE ]
       return
     }
@@ -303,8 +332,20 @@ export class LinearProgram implements PlainLinearProgram {
       varMap[lhs.terms[0].variables[0].variable] = rhs
     }
     this.objective = this.objective.eval(varMap)
+    this.emit(Result.ORIGIN_FEASIBLE)
     yield [ this, Result.ORIGIN_FEASIBLE ]
     yield *this.solve()
+  }
+
+  /**
+   * Solve the LP without stop
+   */
+  solveAll() {
+    let res: Result
+    for(const [ , result ] of this.solve()) {
+      res = result
+    }
+    return res
   }
 
   private *infeasibleHelper(): Generator<[ LinearProgram, Result ], void> {
@@ -317,7 +358,7 @@ export class LinearProgram implements PlainLinearProgram {
     let constraintForNextPivot: Equation
     let minConst: number = +Infinity
     lp.constraints = lp.constraints.map(constraint => {
-      const constant = (constraint.rhs.constants.length && constraint.rhs.constants[0].valueOf()) || 0
+      const constant = getConstant(constraint.rhs.constants)
       if(constant < minConst) {
         minConst = constant
         constraintForNextPivot = constraint = new Equation(constraint.lhs, constraint.rhs.add(helperVar))

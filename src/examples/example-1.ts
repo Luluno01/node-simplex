@@ -1,15 +1,8 @@
 import * as algebra from 'algebra.js'
 import { Expression, Equation } from 'algebra.js'
 import LinearProgram from '../LinearProgram'
+import printSolve from './printSolve'
 
-
-function printSolve(lp: LinearProgram) {
-  console.log(lp.toString() + '\n')
-  for(const [ self, result ] of lp.solve()) {
-    console.log(result)
-    console.log(self.toString() + '\n')
-  }
-}
 
 const lp = new LinearProgram({
   variables: 2,
