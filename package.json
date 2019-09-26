@@ -1,7 +1,7 @@
 {
   "name": "simplex",
   "version": "1.0.0",
-  "description": "Linear program simplex method solver",
+  "description": "Step-by-step linear program simplex method solver",
   "main": "build/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
