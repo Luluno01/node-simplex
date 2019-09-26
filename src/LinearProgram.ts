@@ -23,7 +23,7 @@ export interface PlainLinearProgram {
   constraints: Equation[]
 }
 
-enum Result {
+export enum Result {
   OPTIMIZABLE,
   OPTIMAL,
   UNBOUNDED,
@@ -37,15 +37,39 @@ function coeffOf(terms: typeof Expression.prototype.terms, variableName: string)
   return 0
 }
 
+/**
+ * Human-readable representation of linear program
+ * 
+ * Usage example:
+ * 
+ * ```
+ * const lp = new LinearProgram({
+ *   variables: 2,
+ *   objective: algebra.parse('2 * x1 + 3 * x2'),
+ *   constraints: [
+ *     new algebra.Equation(algebra.parse('w1'), algebra.parse('6 - x1 - x2')),
+ *     new algebra.Equation(algebra.parse('w2'), algebra.parse('10 - 2 * x1 - x2')),
+ *     new algebra.Equation(algebra.parse('w3'), algebra.parse('4 + x1 - x2'))
+ *   ]
+ * })
+ * 
+ * console.log(lp.toString())
+ * console.log(lp.next())
+ * console.log(lp.toString())
+ * console.log(lp.next())
+ * console.log(lp.toString())
+ * console.log(lp.next())
+ * ```
+ */
 export class LinearProgram implements PlainLinearProgram {
   /**
    * The number of variables (standard)
    */
   variables: number
   /**
-   * Ordered names of non-basic variables
+   * Names of non-basic variables
    */
-  nonBasics: string[] = []
+  nonBasics: Set<string> = new Set
   /**
    * Objective function to maximize
    * 
@@ -60,9 +84,9 @@ export class LinearProgram implements PlainLinearProgram {
    */
   constraints: Equation[]
   /**
-   * Ordered names of basic variables
+   * Names of basic variables
    */
-  basics: string[] = []
+  basics: Set<string> = new Set
 
   /**
    * 
@@ -74,15 +98,17 @@ export class LinearProgram implements PlainLinearProgram {
   constructor({ variables, objective, constraints }: PlainLinearProgram, deepCopy: boolean = true) {
     this.variables = variables
     assert(variables > 0, `Invalid number of variables: ${variables}`)
-    for(let i = 1; i <= variables; i++) {
-      this.nonBasics.push(`x${i}`)
+    for(const { variables: [ { variable } ] } of objective.terms) {
+      this.nonBasics.add(variable)
     }
-    assert(objective.terms.length == variables, `Mismatched objective function, expected objective function of ${variables} variables`)
-    assert(constraints.every(({ lhs, rhs }) => lhs.terms.length == 1 && rhs.terms.length <= variables), 'Invalid constraint equation (acceptable example: w0 = 4 - x1 - x2))')
-    const constraintsNum = constraints.length
-    for(let i = 1; i <= constraintsNum; i++) {
-      this.basics.push(`w${i}`)
+    for(const { lhs, rhs } of constraints) {
+      assert(lhs.terms.length == 1 && rhs.terms.length <= variables, `Invalid constraint equation \`${lhs.toString()} = ${rhs.toString()}\` (acceptable example: w0 = 4 - x1 - x2))`)
+      this.basics.add(lhs.terms[0].variables[0].variable)
+      for(const { variables: [ { variable } ] } of rhs.terms) {
+        this.nonBasics.add(variable)
+      }
     }
+    assert(this.nonBasics.size == variables, 'The number of non-basic variables not matches the designated number')
     if(deepCopy) {
       this.objective = objective.add(0)
       this.constraints = constraints.map(({ lhs, rhs }) => new Equation(lhs, rhs))
@@ -100,7 +126,7 @@ export class LinearProgram implements PlainLinearProgram {
    * Check if current dictionry (not the LP) is feasible
    */
   isFeasible() {
-    return this.constraints.every(({ rhs }) => rhs.constants[0].valueOf() >= 0)
+    return this.constraints.every(({ rhs }) => (rhs.constants.length && rhs.constants[0].valueOf() >= 0) || rhs.constants.length == 0)
   }
 
   /**
@@ -114,14 +140,14 @@ export class LinearProgram implements PlainLinearProgram {
    * If the **feasible** dictionary is unbounded
    */
   isUnbounded() {
-    const { objective, constraints, nonBasics } = this
-    for(const nonBasicVariableName of nonBasics) {
+    const { objective, constraints } = this
+    for(const { variables: [ { variable: nonBasicVariableName } ], coefficients: [ coeff ] } of objective.terms) {
       if(
         /**
          * If the coefficient of the non-basic variable in the objective
          * function is positive
          */
-        coeffOf(objective.terms, nonBasicVariableName) > 0
+        coeff.valueOf() > 0
         /**
          * And all the coefficients of the same variable in the constraints
          * are non-negative
@@ -141,15 +167,14 @@ export class LinearProgram implements PlainLinearProgram {
     // Feasible
     const { objective, constraints, nonBasics } = this
     type IncrementBound = [
-      /* non-basic variable index */
-      number,
-      /* constraint index */
-      number,
+      /* non-basic variable name */
+      string,
+      /* constraint */
+      Equation,
       /* upper bound */
       number
     ]
     const incrementBounds: IncrementBound[] = []
-    let variableIndex = 0
     for(const nonBasicVariableName of nonBasics) {
       if(coeffOf(objective.terms, nonBasicVariableName) > 0) {
         // Optimizable
@@ -160,16 +185,16 @@ export class LinearProgram implements PlainLinearProgram {
           if(coeff < 0) {
             if(minIncrementBound == undefined) {
               minIncrementBound = [
-                variableIndex,
-                constraintIndex,
+                nonBasicVariableName,
+                constraint,
                 constraint.rhs.constants[0].valueOf() / (-coeff)
               ]
             } else {
               const bound = constraint.rhs.constants[0].valueOf() / (-coeff)
               if(bound < minIncrementBound[2]) {  // A smaller bound found
                 minIncrementBound = [
-                  variableIndex,
-                  constraintIndex,
+                  nonBasicVariableName,
+                  constraint,
                   constraint.rhs.constants[0].valueOf() / (-coeff)
                 ]
               }
@@ -180,7 +205,6 @@ export class LinearProgram implements PlainLinearProgram {
         if(minIncrementBound) incrementBounds.push(minIncrementBound)
         else return Result.UNBOUNDED
       }
-      variableIndex++
     }
     if(incrementBounds.length) return incrementBounds
     else return Result.OPTIMAL  // Coefficients of all variables are non-positive
@@ -193,14 +217,17 @@ export class LinearProgram implements PlainLinearProgram {
     throw new Error('Not implemented')
   }
 
-  private enterAndLeave(nonBasicVariableIndex: number, basicVariableName: string) {
+  private enterAndLeave(nonBasicVariableName: string, basicVariableName: string) {
     const { nonBasics, basics } = this
-    const nonBasicVariableName = nonBasics[nonBasicVariableIndex]
-    const basicVariableIndex = basics.indexOf(basicVariableName)
-    nonBasics[nonBasicVariableIndex] = basicVariableName
-    basics[basicVariableIndex] = nonBasicVariableName
+    nonBasics.delete(nonBasicVariableName)
+    nonBasics.add(basicVariableName)
+    basics.delete(basicVariableName)
+    basics.add(nonBasicVariableName)
   }
 
+  /**
+   * Do next pivot
+   */
   next() {
     const notImplemented = new Error('Not implemented')
     if(this.isUnbounded()) return Result.UNBOUNDED  // No need to be feasible if unbounded
@@ -211,21 +238,19 @@ export class LinearProgram implements PlainLinearProgram {
         case Result.UNBOUNDED: throw new Error('Unbounded dictionary detected, but the dictionary is detected as bounded previously')
         default:
       }
-      const [ variableIndex, constraintIndex ] = res[0]  // TODO: implement some picking strategy
-      const variableName = this.nonBasics[variableIndex]
-      const constraint = this.constraints[constraintIndex]
+      const [ variableName, constraint ] = res[0]  // TODO: implement some picking strategy
       // `variableName` enters, lhs of constraint leaves
       const newConstraint = new Equation(new Expression(variableName), <Expression><unknown>constraint.solveFor(variableName))
-      this.constraints.forEach((constraint, i) => {
-        if(i == constraintIndex) {
+      this.constraints.forEach((cons, constraintIndex) => {
+        if(cons == constraint) {
           this.constraints[constraintIndex] = newConstraint
         } else {
           const varMap: { [name: string]: Expression } = {}
           varMap[variableName] = newConstraint.rhs
-          this.constraints[i] = new Equation(constraint.lhs, constraint.rhs.eval(varMap))
+          this.constraints[constraintIndex] = new Equation(cons.lhs, cons.rhs.eval(varMap))
         }
       })
-      this.enterAndLeave(variableIndex, constraint.lhs.terms[0].variables[0].variable)
+      this.enterAndLeave(variableName, constraint.lhs.terms[0].variables[0].variable)
       const varMap: { [name: string]: Expression } = {}
       varMap[variableName] = newConstraint.rhs
       this.objective = this.objective.eval(varMap, true)
@@ -234,6 +259,10 @@ export class LinearProgram implements PlainLinearProgram {
       if(this.isUnbounded()) return Result.UNBOUNDED
       return Result.OPTIMIZABLE
     } else throw notImplemented
+  }
+
+  toString() {
+    return `Objective: ${this.objective.toString()}\n${this.constraints.map(constraint => constraint.toString()).join('\n')}`
   }
 }
 

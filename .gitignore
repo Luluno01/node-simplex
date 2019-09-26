@@ -3,3 +3,4 @@ node_modules
 build
 @types
 test.ts
+test.js
