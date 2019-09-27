@@ -1,7 +1,7 @@
 import * as algebra from 'algebra.js'
 import { Expression, Equation } from 'algebra.js'
 import LinearProgram from '../LinearProgram'
-import printSolve from './printSolve'
+import printSolve from '../printSolve'
 
 
 const lp = new LinearProgram({

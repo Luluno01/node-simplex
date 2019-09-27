@@ -2,6 +2,52 @@
 
 A step-by-step linear program simplex method solver.
 
+Solve the LP as simple as
+
+```TypeScript
+import LinearProgram, { printSolve } from 'simplex'
+
+
+const lp = LinearProgram.fromString({
+  variables: 2,
+  objective: '2 * x1 + 3 * x2',
+  constraints: [
+    'w1 = 6 - x1 - x2',
+    'w2 = 10 - 2 * x1 - x2',
+    'w3 = 4 + x1 - x2'
+  ]
+})
+
+printSolve(lp)
+```
+
+And Bob is your uncle! Submit your assignment now!
+
+```
+Objective: 2x1 + 3x2
+w1 = -x1 - x2 + 6
+w2 = -2x1 - x2 + 10
+w3 = x1 - x2 + 4
+
+optimizable
+Objective: 2x2 - w2 + 10
+w1 = -1/2x2 + 1/2w2 + 1
+x1 = -1/2x2 - 1/2w2 + 5
+w3 = -3/2x2 - 1/2w2 + 9
+
+optimizable
+Objective: w2 - 4w1 + 14
+x2 = w2 - 2w1 + 2
+x1 = -w2 + w1 + 4
+w3 = -2w2 + 3w1 + 6
+
+optimal
+Objective: -5/2w1 - 1/2w3 + 17
+x2 = -1/2w1 - 1/2w3 + 5
+x1 = -1/2w1 + 1/2w3 + 1
+w2 = 3/2w1 - 1/2w3 + 3
+```
+
 ## Usage
 
 ### Install

@@ -1,4 +1,4 @@
-import LinearProgram from '../LinearProgram'
+import LinearProgram from './LinearProgram'
 
 
 export function printSolve(lp: LinearProgram) {
