@@ -298,11 +298,11 @@ export class LinearProgram extends EventEmitter implements PlainLinearProgram {
   *solve(): Generator<[ LinearProgram, Result ], void> {
     let result = this.next()
     while(result == Result.OPTIMIZABLE) {
-      this.emit(result)
+      // this.emit(result)
       yield [ this, result ]
       result = this.next()
     }
-    this.emit(result)
+    // this.emit(result)
     yield [ this, result ]
     if(result != Result.HELP_NEEDED) return
     const gen = this.infeasibleHelper()
