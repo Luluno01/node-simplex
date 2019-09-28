@@ -332,6 +332,8 @@ export class LinearProgram extends EventEmitter implements PlainLinearProgram {
       varMap[lhs.terms[0].variables[0].variable] = rhs
     }
     this.objective = this.objective.eval(varMap)
+    this.basics = new Set(helperLP.basics)
+    this.nonBasics = new Set(helperLP.nonBasics)
     this.emit(Result.ORIGIN_FEASIBLE)
     yield [ this, Result.ORIGIN_FEASIBLE ]
     yield *this.solve()
