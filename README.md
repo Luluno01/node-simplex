@@ -83,7 +83,7 @@ npm run build
 
 ## Lambda Function Version
 
-See [simplex-netlify](github.com/Luluno01/simplex-netlify).
+See [simplex-netlify](https://github.com/Luluno01/simplex-netlify).
 
 Live demo [node-simplex.netlify.com](https://node-simplex.netlify.com/) [![Netlify Status](https://api.netlify.com/api/v1/badges/cb862792-1a20-4277-9e06-adc9008036b0/deploy-status)](https://app.netlify.com/sites/node-simplex/deploys)
 
