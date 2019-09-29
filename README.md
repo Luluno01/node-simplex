@@ -80,3 +80,15 @@ npm install
 ```bash
 npm run build
 ```
+
+## Lambda Function Version
+
+See [simplex-netlify](github.com/Luluno01/simplex-netlify).
+
+Live demo [node-simplex.netlify.com](https://node-simplex.netlify.com/) [![Netlify Status](https://api.netlify.com/api/v1/badges/cb862792-1a20-4277-9e06-adc9008036b0/deploy-status)](https://app.netlify.com/sites/node-simplex/deploys)
+
+## Fully Static Web Page Version
+
+See [simple-simplex](https://github.com/Luluno01/simple-simplex).
+
+Live demo [simplex.untitled.vip/](https://simplex.untitled.vip/) [![Netlify Status](https://api.netlify.com/api/v1/badges/23ff585e-0de6-4d26-9be2-773e37b90a2f/deploy-status)](https://app.netlify.com/sites/simple-simlex/deploys)
