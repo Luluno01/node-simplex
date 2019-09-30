@@ -11,7 +11,7 @@ const lp = new LinearProgram({
     <Equation>algebra.parse('w1 = -5 + x1 + 5 * x2 + 3 * x3'),
     <Equation>algebra.parse('w2 = 4 - 2 * x1 + x2 - 2 * x3'),
     <Equation>algebra.parse('w3 = -2 + x1 + 2 * x2 - x3'),
-    <Equation>algebra.parse('w3 = 2 - x1 - 2 * x2 + x3')
+    <Equation>algebra.parse('w4 = 2 - x1 - 2 * x2 + x3')
   ]
 })
 
