@@ -199,7 +199,7 @@ export class LinearProgram extends EventEmitter implements PlainLinearProgram {
                 getConstant(constraint.rhs.constants) / (-coeff)
               ]
             } else {
-              const bound = constraint.rhs.constants[0].valueOf() / (-coeff)
+              const bound = getConstant(constraint.rhs.constants) / (-coeff)
               if(bound < minIncrementBound[2]) {  // A smaller bound found
                 minIncrementBound = [
                   nonBasicVariableName,
