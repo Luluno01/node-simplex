@@ -15,7 +15,7 @@
   "license": "ISC",
   "dependencies": {
     "algebra.js": "^0.2.6",
-    "mathjs": "^6.2.1"
+    "mathjs": "^7.5.1"
   },
   "devDependencies": {
     "@types/algebra.js": "^0.2.1",
